@@ -5,7 +5,7 @@
 #include <map>
 #include <set>
 #include <stdint.h>
-
+#include <algorithm>
 
 // Just set N and M; 
 #define N (16)
@@ -256,9 +256,44 @@ void test_cypher()
 /////////////// DFA ////////////////////
 ////////////////////////////////////////
 
-#define FAULT_ROUND (27)
+#define FAULT_ROUND (29)
 
 double S[2 * N][2 * N] = { 0 };
+
+double correlation(double *a, double *b)
+{
+
+	double a_mean, b_mean, a_var, b_var, num, corr;
+	a_mean = b_mean = a_var = b_var = num = 0;
+
+	for (int i = 0; i < 2 * N; ++i)
+	{
+		if ((a[i] == 0.5 && b[i] == -0.5) || (b[i] == 0.5 && a[i] == -0.5))
+		{
+			return -1;
+		}
+
+		a_mean += a[i];
+		b_mean += b[i];
+	}
+
+	a_mean /= 2*N;
+	b_mean /= 2*N;
+
+	for (int i = 0; i < 2 * N; ++i)
+	{
+		a_var += (a[i] - a_mean)*(a[i] - a_mean);
+		b_var += (b[i] - b_mean)*(b[i] - b_mean);
+		num += (a[i] - a_mean)*(b[i] - b_mean);
+	}
+
+	a_var = sqrt(a_var);
+	b_var = sqrt(b_var);
+
+	corr = num / (a_var * b_var);
+
+	return corr;
+}
 
 void faulty_encrypt(uint64_t &x, uint64_t &y, int num_rounds, int fault_round, int fault_location) 
 {
@@ -376,6 +411,7 @@ void dfa_online()
 	encrypt(x,y);
 
 	double trail[2 * N] = {0};
+	std::vector<std::pair<double, int>> corr(2 * N);
 
 	printf("Plain Text : %lx %lx \n", a, b);
 	printf("Encrypted : %lx %lx \n", x, y);
@@ -416,12 +452,148 @@ void dfa_online()
 			}
 		}
 
-		for (int i=0;i<2*N;i++)
+		// for (int i = 0; i < 2 * N; ++i)
+		// {
+		// 	printf("%f ", trail[i]);
+		// }
+		// printf("\n");
+
+		// for (int i = 0; i < 2 * N; ++i)
+		// {
+		// 	printf("%f ", S[p][i]);
+		// }
+		// printf("\n");
+
+		
+		for (int i = 0; i < 2 * N; ++i)
 		{
-			printf("%f ", trail[i]);
+
+			std::pair<double, int>p = {correlation(trail, S[i]), i+1};
+			corr[i] = p;
+		}
+
+
+		std::sort(corr.begin(),corr.end());
+
+		for (int i = 0; i < 2 * N; ++i)
+		{
+			printf("%f %d \n", corr[i].first, corr[i].second);
+		}
+
+		printf("\n");
+	}
+}
+
+
+void dfa_online_test()
+{
+
+	uint64_t iterations = 1e5;
+
+	uint64_t x,y,a,b,xf,yf;
+	uint64_t xdiff, ydiff;
+	
+	uint64_t counter[2 * N][2 * N] = {0};
+	
+	double trail[2 * N] = {0};
+	std::vector<std::pair<double, int>> corr(2 * N);
+
+
+	for (int l = 0; l < iterations; ++l)
+	{
+		a = uni_dist(rng) & WORD_MASK;
+		b = uni_dist(rng) & WORD_MASK;
+		setup_random_key();
+
+		xf = x = a;
+		yf = y = b;
+
+		encrypt(x,y);
+
+		for (int m = 0; m <= 4; ++m)
+		{
+			xf = a;
+			yf = b;
+			int p = uni_dist(rng) % (N*2);
+
+			faulty_encrypt(xf, yf, p+1);
+
+			xdiff = x ^ xf;
+			ydiff = y ^ yf;
+
+			for (int i = 0; i < N; ++i)
+			{
+				if (xdiff & (1ul << i))
+				{
+					trail[i] = -0.5;
+				}else
+				{
+					trail[i] = 0.5;
+				}
+			}
+
+			for (int i = 0; i < N; ++i)
+			{
+				if (ydiff & (1ul << i))
+				{
+					trail[N + i] = -0.5;
+				}else
+				{
+					trail[N + i] = 0.5;
+				}
+			}
+
+			// for (int i = 0; i < 2 * N; ++i)
+			// {
+			// 	printf("%f ", trail[i]);
+			// }
+			// printf("\n");
+
+			// for (int i = 0; i < 2 * N; ++i)
+			// {
+			// 	printf("%f ", S[p][i]);
+			// }
+			// printf("\n");
+
+			
+			for (int i = 0; i < 2 * N; ++i)
+			{
+				std::pair<double, int>pa = {correlation(trail, S[i]), i+1};
+				corr[i] = pa;
+			}
+
+			std::sort(corr.begin(),corr.end());
+
+			for (int i = 0; i < 2 * N; ++i)
+			{
+				if (corr[i].second == p+1)
+					counter[p][2 * N - i -1]++;
+			}
+		}
+	}
+
+	for (int i=0;i<2*N;i++)
+	{
+		printf("%d : ", i+1);
+		for (int j=0;j<2*N;j++)
+		{
+			printf("%ld ", counter[i][j]);
 		}
 		printf("\n");
 	}
+	
+	printf("\n");
+	
+	// for (int i=0;i<2*N;i++)
+	// {
+	// 	printf("%d : ", i+1);
+	// 	for (int j=0;j<2*N;j++)
+	// 	{
+	// 		printf("%f ", (double)counter[i][j] / (double)iterations);
+	// 	}
+	// 	printf("\n");
+	// }
+
 }
 
 int main() {
@@ -430,11 +602,11 @@ int main() {
 
 	printf("%llx\n",WORD_MASK);
 
-	printf("%llx\n", 0x1ull);
+	// printf("%llx\n", 0x1ull);
 
-	uint64_t hi;
+	// uint64_t hi;
 
-	printf("\nllo\n");
+	// printf("\nllo\n");
 
 	test();
 	test_cypher();
@@ -443,57 +615,23 @@ int main() {
 	uint64_t keys[M] = {0x0100, 0x0908, 0x1110, 0x1918};
 	set_key(keys);
 
-	uint64_t x, y, ex, ey;
+	uint64_t x, y, ex, ey, xf, yf;
 	x = 0x6565;	y = 0x6877;	ex = 0xc69b; ey = 0xe9bb;
 	faulty_encrypt(x, y, 8);
 	printf("%lx, %lx \n", x, y);
 	printf("%s, %s \n", binary(x), binary(y));
 
-	x = 0x6565;	y = 0x6877;
+	xf = 0x6565;	yf = 0x6877;
 	
-	encrypt(x, y);
-	printf("%lx, %lx \n", x, y);
-	printf("%s, %s \n", binary(x), binary(y));
+	encrypt(xf, yf);
+	printf("%lx, %lx \n", xf, yf);
+	printf("%s, %s \n", binary(xf), binary(yf));
+	printf("%s, %s \n", binary(x^xf), binary(y^yf));
+
 
 	dfa_offline();
-
 	dfa_online();
-
-
-	// test_enc();
-	// run_test_vectors();
-
-
-	// diff_BB(0x0001, 0x0000, 0, 1.0);
-	
-	//test_differential(0x0001, 0x0000, 0x1501, 0x0404, 6);
-	//diff_attack        (0x0001, 0x0000, 0x0201, 0x0100, 13);
-	
-	//std::string a(N, '0'); //a[N-1] = '1';
-	//std::string b(N, '0'); b[N-8] = '1';
-	//impossible_diff(a, b);
-	//impossible_diff_attack();
-	
-	//imp_diff_attack3();
-
-	//key_difference();
-	
-	//generate_key_relations(2);
-
-	//differences_to_zero_diff();
-
-	//test_differential(0x5555);
-	//iterated_diff_attack(0x1111);
-	//diff_dist_table();
-	//weak_keys();
-	//ddt_diagonal();
-	//is_F_balanced();
-	
-	//test_key_rotation();
-	//rotational_approx();
-	//test_rotational();
-	//run_test_vectors();
-	//test_enc();
+	dfa_online_test();
 
 	return 0;
 }
