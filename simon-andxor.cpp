@@ -8,6 +8,16 @@
 #include <stdint.h>
 #include <algorithm>
 #include <fstream>
+
+#include <cryptominisat5/cryptominisat.h>
+#include <assert.h>
+
+using std::vector;
+using CMSat::Lit;
+using CMSat::lbool;
+using CMSat::SATSolver;
+using std::vector;
+
 // Just set N and M; 
 #define N (16)
 #define M (4)
@@ -261,7 +271,45 @@ void test_cypher()
 /////////////// DFA ////////////////////
 ////////////////////////////////////////
 
+////////////////////////////////////////
+///////////// Fault Injection //////////
+////////////////////////////////////////
+
 #define FAULT_ROUND (ROUNDS -2)
+
+void faulty_encrypt(uint64_t &x, uint64_t &y, int num_rounds, int fault_round, int fault_location) 
+{
+	uint64_t tmp;
+	int i;
+	for (i = 0; i < fault_round - 1; ++i) 
+	{
+		tmp = x;
+		x = y ^ F(x) ^ k[i];
+		y = tmp;
+	}
+
+	if (fault_location >= 1 && fault_location <= N)
+		x ^= 1ul << (fault_location -1);
+	else if (fault_location >= N+1 && fault_location <= 2*N)
+		y ^= 1ul << (fault_location - N -1);
+
+	for (; i < num_rounds; ++i) 
+	{
+		tmp = x;
+		x = y ^ F(x) ^ k[i];
+		y = tmp;
+	}
+}
+
+void faulty_encrypt(uint64_t &x, uint64_t &y, int fault_location) 
+{
+	faulty_encrypt(x, y, ROUNDS, FAULT_ROUND, fault_location);
+}
+
+
+////////////////////////////////////////
+///////////// Fault Prediction /////////
+////////////////////////////////////////
 
 double S[2 * N][2 * N] = { 0 };
 
@@ -297,35 +345,6 @@ double correlation(double *a, double *b)
 
 	corr = num / (a_var * b_var);
 	return corr;
-}
-
-void faulty_encrypt(uint64_t &x, uint64_t &y, int num_rounds, int fault_round, int fault_location) 
-{
-	uint64_t tmp;
-	int i;
-	for (i = 0; i < fault_round - 1; ++i) 
-	{
-		tmp = x;
-		x = y ^ F(x) ^ k[i];
-		y = tmp;
-	}
-
-	if (fault_location >= 1 && fault_location <= N)
-		x ^= 1ul << (fault_location -1);
-	else if (fault_location >= N+1 && fault_location <= 2*N)
-		y ^= 1ul << (fault_location - N -1);
-
-	for (; i < num_rounds; ++i) 
-	{
-		tmp = x;
-		x = y ^ F(x) ^ k[i];
-		y = tmp;
-	}
-}
-
-void faulty_encrypt(uint64_t &x, uint64_t &y, int fault_location) 
-{
-	faulty_encrypt(x, y, ROUNDS, FAULT_ROUND, fault_location);
 }
 
 void dfa_offline()
@@ -399,16 +418,11 @@ void dfa_offline()
 	// }
 }
 
-int predict_fault_location(uint64_t x, uint64_t y, 
-							uint64_t xf, uint64_t yf)
+int predict_fault_location(uint64_t xdiff, uint64_t ydiff)
 {
-	uint64_t xdiff, ydiff;
 
 	double trail[2 * N] = {0};
 	std::vector<std::pair<double, int>> corr(2 * N);
-
-	xdiff = x ^ xf;
-	ydiff = y ^ yf;
 
 	for (int i = 0; i < N; ++i)
 	{
@@ -493,7 +507,11 @@ void fault_prediction_test()
 
 			faulty_encrypt(xf, yf, p+1);
 
-			int k = predict_fault_location(x,y,xf,yf);
+			xdiff = x^xf;
+			ydiff = y^yf;
+
+
+			int k = predict_fault_location(xdiff,ydiff);
 		
 			if (k == p+1)
 			{
@@ -628,148 +646,84 @@ void fault_prediction_test_complete()
 }
 
 
-void dfa_attack_2nd_last_round()
+///////////////////////////////////////
+////////////// SAT SETUP //////////////
+///////////////////////////////////////
+
+int temp_vars = 3*N;
+
+
+/*
+	represents A & B = C
+*/
+
+void set_sat(SATSolver &solver, int A, bool a_val)
 {
-
-	uint64_t x,y,a,b,xf,yf,lr1x, x1,y1;
-
-	a = uni_dist(rng) & WORD_MASK;
-	b = uni_dist(rng) & WORD_MASK;
-	setup_random_key();
-
-	std::fstream cnf;
-	cnf.open("dfa.cnf", std::ios::out);
-
-	xf = x = x1 = a;
-	yf = y = y1 = b;
-
-	encrypt(x,y);
-	encrypt(x1,y1,ROUNDS-1);
-
-	printf("Plain Text : %lx %lx \n", a, b);
-	printf("Encrypted : %lx %lx \n", x, y);
-
-	int number_of_faults = 13; //Each fault involves 2 variables in the equations
-
-	cnf << "p cnf "<<N<<' '<<number_of_faults * 2<<"\n";
-
-	std::set<int>ff;
-
-
-	for (int m = 1; m <= number_of_faults; ++m)
-	{
-		int p;
-
-		p = uni_dist(rng) % (N);
-		while(ff.find(p) != ff.end())
-		{
-			p = uni_dist(rng) % (N);
-		}
-		ff.insert(p);
-
-
-		xf = a;
-		yf = b;
-
-		faulty_encrypt(xf, yf, ROUNDS, ROUNDS-1, p+1);
-
-		// printf("Faulty Encrypted : %lx %lx , Fault : %d\n", xf, yf, p+1);
-
-		int k = predict_fault_location(x,y,xf,yf);
-		k--;
-
-		if (k != p)
-		{
-			printf("Atteck Failed, poor fault prediction detection\n");
-		}
-
-		lr1x = y ^ yf;
-
-		if(lr1x & (1<< ((k+1)%N) ))
-		{
-			cnf<<((k-7+N)%N)+1<<" 0\n";
-		}else
-		{
-			cnf<<'-'<<((k-7+N)%N)+1<<" 0\n";	
-		}
-
-		if(lr1x & (1<< ((k+8)%N) ))
-		{
-			cnf<<((k+7+N)%N)+1<<" 0\n";
-		}else
-		{
-			cnf<<'-'<<((k+7+N)%N)+1<<" 0\n";	
-		}
-	}
-	printf("Answer : %s\n", binary(y1));
-
-	// system("cryptominisat5 --verb 0 --maxsol 20 dfa.cnf >> sat_out.txt");
+	vector<Lit> clause;
+	clause.push_back(Lit(A,!a_val));
+	solver.add_clause(clause);
 }
 
-void dfa_attack_3rd_last_round()
+void and_sat(SATSolver &solver, int A, bool a, int B, bool b, int C, bool c)
+{
+	vector<Lit> clause;
+
+	clause.push_back(Lit(A,a));
+	clause.push_back(Lit(C,!c));
+	solver.add_clause(clause);
+	clause.clear();
+
+	clause.push_back(Lit(B,b));
+	clause.push_back(Lit(C,!c));
+	solver.add_clause(clause);
+	clause.clear();
+
+	clause.push_back(Lit(A,!a));
+	clause.push_back(Lit(B,!b));
+	clause.push_back(Lit(C,c));
+	solver.add_clause(clause);
+}
+
+void and_sat(SATSolver &solver, int A, int B, int C)
+{
+	and_sat(solver, A, false, B, false, C, false);
+}
+
+void xor_sat(SATSolver &solver, int A, bool a, int B, bool b, int C, bool c)
 {
 
-	uint64_t x,y,a,b,xf,yf,lr1x, x1,y1;
+	vector<unsigned> xclause;
+	xclause.push_back(A);
+	xclause.push_back(B);
+	xclause.push_back(C);
 
-	a = uni_dist(rng) & WORD_MASK;
-	b = uni_dist(rng) & WORD_MASK;
-	setup_random_key();
+	bool rhs = false;
 
-	std::fstream cnf;
-	cnf.open("dfa.cnf", std::ios::out);
+	if(a) rhs = !rhs;
+	if(b) rhs = !rhs;
+	if(c) rhs = !rhs;
 
-	xf = x = x1 = a;
-	yf = y = y1 = b;
+	solver.add_xor_clause(xclause, rhs);
+}
 
-	encrypt(x,y);
-	encrypt(x1,y1,ROUNDS-1);
+void xor_sat(SATSolver &solver, int A, int B, int C)
+{
+	xor_sat(solver, A, false, B, false, C, false);
+}
 
-	printf("Plain Text : %lx %lx \n", a, b);
-	printf("%s, %s \n\n", binary(a), binary(b));
+// void complete_dfa()
+// {
 
-	printf("Encrypted : %lx %lx \n", x, y);
-	printf("%s, %s \n\n", binary(x), binary(y));
+// }
 
-	int number_of_faults = 9; //Each fault involves 2 variables in the equations
+std::map<int,int>vars;
 
-	cnf << "p cnf "<<N<<' '<<number_of_faults<<"\n";
-
-	std::set<int>ff;
-	std::map<int,int>vars;
-	int var_counter = N+1;
-
-	for (int m = 1; m <= number_of_faults; ++m)
-	{
-		int p;
-
-		p = uni_dist(rng) % (N);
-		while(ff.find(p) != ff.end())
-		{
-			p = uni_dist(rng) % (N);
-		}
-
-		ff.insert(p);
-
-		xf = a;
-		yf = b;
-
-		faulty_encrypt(xf, yf, ROUNDS, ROUNDS-2, p+1);
-		// faulty_encrypt(xf, yf, p+1);
-
-		printf("Faulty Encrypted : %lx %lx , Fault : %d\n", xf, yf, p+1);
-
-		int k = predict_fault_location(x,y,xf,yf);
-		k--;
-
-		if (k != p)
-		{
-			printf("Atteck Failed, poor fault prediction detection\n");
-		}
-
+void equations_3rd_round(SATSolver &solver,uint64_t lr1x, int k, int &var_counter)
+{
 
 		int c,d;
-		int A = ((k-7+N)%N)+1;
-		int B = ((k+7+N)%N)+1;
+		int A = ((k-7+N)%N);
+		int B = ((k+7+N)%N);
 
 		if(vars.find(A) != vars.end())
 		{
@@ -791,83 +745,258 @@ void dfa_attack_3rd_last_round()
 			var_counter++;
 		}
 
-		lr1x = y ^ yf;
-		printf("xor: %s \n\n", binary(lr1x));
-
-		if(lr1x & (1<< ((k+2)%N) ))
-		{
-			cnf<<((k-6+N)%N)+1<<" 0\n";
-			cnf<<c<<" 0\n";
-		}else
-		{
-			cnf<<'-'<<((k-6+N)%N)+1<<" -"<<c<<" 0\n";	
-		}
+		and_sat(solver, ((k-6+N)%N), c, var_counter);
+		set_sat(solver, var_counter, lr1x & (1<< ((k+2)%N))? true : false );
+		var_counter++;
 
 		if((k+16)%N != k)
 		{		
-			if(lr1x & (1<< ((k+16)%N) ))
-			{
-				cnf<<((k+15)%N)+1<<" 0\n";
-				cnf<<d<<" 0\n";
-			}else
-			{
-				cnf<<'-'<<((k+15)%N)+1<<" -"<<d<<" 0\n";	
-			}	
+			and_sat(solver, ((k+15)%N), d, var_counter);
+			set_sat(solver, var_counter, lr1x & (1<< ((k+16)%N))? true : false );
 		}else
 		{
-			if(lr1x & (1<< ((k+16)%N) ))
-			{
-				cnf<<'-'<<((k+15)%N)+1<<" -"<<d<<" 0\n";	
-			}else
-			{
-				cnf<<((k+15)%N)+1<<" 0\n";
-				cnf<<d<<" 0\n";
-			}
+			and_sat(solver, ((k+15)%N), d, var_counter);
+			set_sat(solver, var_counter, lr1x & (1<< ((k+16)%N))? false : true );
+		}
+		var_counter++;
+
+
+		xor_sat(solver, ((k-5+N)%N), c, var_counter);
+		set_sat(solver, var_counter, lr1x & (1<< ((k+3)%N))? true : false);
+		var_counter++;
+
+		xor_sat(solver, ((k+9+N)%N), d, var_counter);
+		set_sat(solver, var_counter, lr1x & (1<< ((k+10)%N))? true : false);
+		var_counter++;
+
+		xor_sat(solver, ((k+1)%N), c, var_counter);
+		int ta = var_counter;
+		var_counter++;
+
+		xor_sat(solver, ((k+8)%N), d, var_counter);
+		int tb = var_counter;
+		var_counter++;
+
+		and_sat(solver, ((k+1)%N), ((k+8)%N), var_counter);
+		int tc = var_counter;
+		var_counter++;
+
+		and_sat(solver, ta, tb, var_counter);
+		int td = var_counter;
+		var_counter++;
+
+		xor_sat(solver, tc, td, var_counter);
+		set_sat(solver, var_counter, lr1x & (1<< ((k+9)%N)) ? true : false);
+		var_counter++;
+}
+
+void dfa_attack_1(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2])
+{
+	uint64_t x,y,xf,yf,lr1x,x1,y1;
+
+	xf = x = x1 = a;
+	yf = y = y1 = b;
+
+	encrypt(x,y);
+
+	printf("Plain Text : %lx %lx \n", a, b);
+	printf("%s, %s \n\n", binary(a), binary(b));
+
+	printf("Encrypted : %lx %lx \n", x, y);
+	printf("%s, %s \n\n", binary(x), binary(y));
+
+	// int number_of_faults = 10;
+
+	std::set<int>ff;
+	int var_counter = N+1;
+	int prev_counter = 0;
+
+	SATSolver solver;
+	
+	solver.log_to_file("logger.txt");
+
+    solver.set_num_threads(6);
+    // solver.new_vars(N+1);
+
+	// for (int m = 1; m <= number_of_faults; ++m)
+	int m = 0;
+	while(true)
+	{
+		m++;
+		int p;
+		p = uni_dist(rng) % (N);
+		while(ff.find(p) != ff.end())
+		{
+			p = uni_dist(rng) % (N);
+		}
+		ff.insert(p);
+
+		xf = a;
+		yf = b;
+
+		faulty_encrypt(xf, yf, ROUNDS, ROUNDS-2, p+1);
+		// faulty_encrypt(xf, yf, p+1);
+
+		printf("Fault Number %d\n", m);
+		printf("Faulty Encrypted : %lx %lx , Fault : %d\n", xf, yf, p+1);
+
+		int k = predict_fault_location(x^xf,y^yf);
+		k--;
+
+		if (k != p)
+		{
+			printf("Attack Failed, poor fault prediction detection\n");
 		}
 
+		lr1x = y ^ yf;
 
-		if(lr1x & (1<< ((k+3)%N) ))
-		{
-			cnf<<'x'<<((k-5+N)%N)+1<<" "<<c<<" 0\n";
-		}else
-		{
-			cnf<<'x'<<((k-5+N)%N)+1<<" -"<<c<<" 0\n";
-		}
+		printf("XOR :");
+		printf("%s \n\n", binary(lr1x));
 
-		if(lr1x & (1<< ((k+10)%N) ))
-		{
-			cnf<<'x'<<((k+9)%N)+1<<" "<<d<<" 0\n";
-		}else
-		{
-			cnf<<'x'<<((k+9)%N)+1<<" -"<<d<<" 0\n";
-		}
+		equations_3rd_round(solver, lr1x, k, var_counter);
 
-		int a = ((k+1)%N)+1;
-		int b = ((k+8)%N)+1;
+		int new_vars = var_counter - prev_counter;
+		prev_counter = var_counter;
 
-		if(lr1x & (1<< ((k+9)%N)))
-		{
-			cnf<<b<<" "<<d<<" 0\n";
-			cnf<<a<<" "<<c<<" 0\n";
-			cnf<<c<<" "<<d<<" 0\n";
-			cnf<<"-"<<a<<" "<<b<<" -"<<c<<" 0\n";
-			cnf<<a<<" -"<<b<<" -"<<d<<" 0\n";
-		}else
-		{
-			cnf<<"-"<<a<<" "<<c<<" "<<d<<" 0\n";
-			cnf<<"-"<<b<<" -"<<c<<" "<<d<<" 0\n";
-			cnf<<"-"<<a<<" -"<<b<<" -"<<c<<" -"<<d<<" 0\n";
-			cnf<<a<<" "<<b<<" -"<<c<<" -"<<d<<" 0\n";
-		}
+		solver.new_vars(new_vars);
+
+		lbool ret = solver.solve();
+
+		if (ret != l_True) {
+	        std::cout<< "**Fatal Error!! No Solution Found for the sat solver**\n";
+	        break;
+        }
+
+        vector<Lit> ban_solution;
+        for (uint32_t var = 0; var < N; var++) {
+            if (solver.get_model()[var] != l_Undef) {
+                ban_solution.push_back(
+                    Lit(var, (solver.get_model()[var] == l_True)? true : false));
+        		std::cout<<var<<' ';
+        		
+            }
+        
+        }
+       
+        ret = solver.solve(&ban_solution);
+
+        std::cout<<ret;
+		if (ret != l_True) {
+	        std::cout<< "Unique Solution Found!!\n";
+	        break;
+        }
+
 	}
 
-	printf("Answer : %s\n", binary(y1));
+
+	solver.solve();
+    std::cout<< "Solution is: ";
+
+        // for (uint32_t var = 0; var < solver.nVars(); var++) {
+        //     std::cout<<solver.get_model()[var]<<','; 
+        //     }
+        //     std::cout<<std::endl;
+
+    for (uint32_t var = 0; var < N; var++) {
+        std::cout<<solver.get_model()[var]<<','; 
+        }
+        std::cout<<std::endl;
+
+
+    for (uint32_t var = 0; var < N; var++) 
+    {
+        if (solver.get_model()[var] != l_Undef) 
+        {
+        	found[var][2] = true;
+            if(solver.get_model()[var] == l_True)
+            {
+            	L_reg[2] != (1<<var);
+            }
+        }
+    }
+
 	printf("Mappings:\n");
 	for(auto a: vars)
 	{
 		printf("%d,%d\n",a.first,a.second);
 	}
+
+	for(auto a: vars)
+	{
+		int var = a.first;
+		int m = a.second;
+
+        if (solver.get_model()[m] != l_Undef) 
+        {
+        	found[var][3] = true;
+            if(solver.get_model()[m] == l_True)
+            {
+            	L_reg[3] != (1<<var);
+            }
+        }
+	}
+
+	return;
+
 }
+
+void complete_dfa()
+{
+
+	printf("\n****Starting Attack****\n");
+
+	uint64_t x,y,a,b;
+
+	a = uni_dist(rng) & WORD_MASK;
+	b = uni_dist(rng) & WORD_MASK;
+	setup_random_key();
+
+	uint64_t answer[M+2];
+
+	for(int i=0;i<=M+1;i++)
+	{
+		x = a;
+		y = b;
+		encrypt(x,y,ROUNDS-i);
+		answer[i] = x;
+	}
+
+	printf("Plain Text : %lx %lx \n", a, b);
+	printf("%s, %s \n\n", binary(a), binary(b));
+
+	x = a;
+	y = b;
+	encrypt(x,y);
+
+	printf("Encrypted Text : %lx %lx \n", x, y);
+	printf("%s, %s \n\n", binary(x), binary(y));
+
+
+	for(int i=0;i<=M+1;i++)
+	{	
+		printf("Answer (L registers from the last round - %d):: %s \n",i, binary(answer[i]));
+	}
+	printf("\n\n");
+
+	bool found[N+1][M+2];
+	uint64_t L_reg[M+2];
+
+	L_reg[0] = answer[0];
+	L_reg[1] = answer[1];
+
+	for(int i=0;i<N+1;i++)
+	{
+		for(int j=0;j<M+2;j++)
+		{
+			found[i][j] = false;
+			if(i<2) found[i][j] = true;
+		}
+	}
+
+	dfa_attack_1(a, b, found, L_reg);
+
+}
+
 
 void dfa_online()
 {
@@ -896,7 +1025,7 @@ void dfa_online()
 
 		printf("Faulty Encrypted : %lx %lx , Fault : %d\n", xf, yf, p+1);
 
-		int k = predict_fault_location(x,y,xf,yf);
+		int k = predict_fault_location(x^xf,y^yf);
 
 		printf("%d\n", k);
 		printf("\n");
@@ -934,12 +1063,15 @@ int main() {
 	printf("%s, %s \n", binary(xf), binary(yf));
 	printf("%s, %s \n", binary(x^xf), binary(y^yf));
 
-
 	dfa_offline();
 	// dfa_online();
 	// fault_prediction_test();
 	// dfa_attack_2nd_last_round();
-	dfa_attack_3rd_last_round();
+
+	complete_dfa();
+
+	// dfa_attack_1();
+	// sat_solver();
 
 	return 0;
 }
