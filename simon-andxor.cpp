@@ -12,11 +12,12 @@
 #include <cryptominisat5/cryptominisat.h>
 #include <assert.h>
 
-using std::vector;
 using CMSat::Lit;
 using CMSat::lbool;
 using CMSat::SATSolver;
 using std::vector;
+using std::pair;
+
 
 // Just set N and M; 
 #define N (16)
@@ -716,114 +717,139 @@ void xor_sat(SATSolver &solver, int A, int B, int C)
 
 // }
 
-std::map<int,int>vars;
 
-void equations_3rd_round(SATSolver &solver,uint64_t lr1x, int k, int &var_counter)
+
+void equations_2rd_round(SATSolver &solver,uint64_t lxor, int k, int &var_counter, std::map<int,int>&vars)
 {
+	int c,d;
+	int A = ((k-7+N)%N);
+	int B = ((k+7+N)%N);
 
-		int c,d;
-		int A = ((k-7+N)%N);
-		int B = ((k+7+N)%N);
-
-		if(vars.find(A) != vars.end())
-		{
-			c = vars[A];
-		}else
-		{
-			c = var_counter;
-			vars[A] = var_counter;
-			var_counter++;
-		}
-
-		if(vars.find(B) != vars.end())
-		{
-			d = vars[B];
-		}else
-		{
-			d = var_counter;
-			vars[B] = var_counter;
-			var_counter++;
-		}
-
-		and_sat(solver, ((k-6+N)%N), c, var_counter);
-		set_sat(solver, var_counter, lr1x & (1<< ((k+2)%N))? true : false );
+	if(vars.find(A) != vars.end())
+	{
+		c = vars[A];
+	}else
+	{
+		c = var_counter;
+		vars[A] = var_counter;
 		var_counter++;
+	}
 
-		if((k+16)%N != k)
-		{		
-			and_sat(solver, ((k+15)%N), d, var_counter);
-			set_sat(solver, var_counter, lr1x & (1<< ((k+16)%N))? true : false );
-		}else
-		{
-			and_sat(solver, ((k+15)%N), d, var_counter);
-			set_sat(solver, var_counter, lr1x & (1<< ((k+16)%N))? false : true );
-		}
+	if(vars.find(B) != vars.end())
+	{
+		d = vars[B];
+	}else
+	{
+		d = var_counter;
+		vars[B] = var_counter;
 		var_counter++;
+	}
 
-
-		xor_sat(solver, ((k-5+N)%N), c, var_counter);
-		set_sat(solver, var_counter, lr1x & (1<< ((k+3)%N))? true : false);
-		var_counter++;
-
-		xor_sat(solver, ((k+9+N)%N), d, var_counter);
-		set_sat(solver, var_counter, lr1x & (1<< ((k+10)%N))? true : false);
-		var_counter++;
-
-		xor_sat(solver, ((k+1)%N), c, var_counter);
-		int ta = var_counter;
-		var_counter++;
-
-		xor_sat(solver, ((k+8)%N), d, var_counter);
-		int tb = var_counter;
-		var_counter++;
-
-		and_sat(solver, ((k+1)%N), ((k+8)%N), var_counter);
-		int tc = var_counter;
-		var_counter++;
-
-		and_sat(solver, ta, tb, var_counter);
-		int td = var_counter;
-		var_counter++;
-
-		xor_sat(solver, tc, td, var_counter);
-		set_sat(solver, var_counter, lr1x & (1<< ((k+9)%N)) ? true : false);
-		var_counter++;
+	set_sat(solver, c, lxor & (1<< ((k+1)%N))? true : false );
+	set_sat(solver, d, lxor & (1<< ((k+8)%N))? true : false );
 }
 
-void dfa_attack_1(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2])
+void equations_3rd_round(SATSolver &solver,uint64_t lr1x, int k, int &var_counter, std::map<int,int>&vars)
 {
-	uint64_t x,y,xf,yf,lr1x,x1,y1;
+	int c,d;
+	int A = ((k-7+N)%N);
+	int B = ((k+7+N)%N);
 
-	xf = x = x1 = a;
-	yf = y = y1 = b;
+	if(vars.find(A) != vars.end())
+	{
+		c = vars[A];
+	}else
+	{
+		c = var_counter;
+		vars[A] = var_counter;
+		var_counter++;
+	}
 
+	if(vars.find(B) != vars.end())
+	{
+		d = vars[B];
+	}else
+	{
+		d = var_counter;
+		vars[B] = var_counter;
+		var_counter++;
+	}
+
+	and_sat(solver, ((k-6+N)%N), c, var_counter);
+	set_sat(solver, var_counter, lr1x & (1<< ((k+2)%N))? true : false );
+	var_counter++;
+
+	if((k+16)%N != k)
+	{		
+		and_sat(solver, ((k+15)%N), d, var_counter);
+		set_sat(solver, var_counter, lr1x & (1<< ((k+16)%N))? true : false );
+	}else
+	{
+		and_sat(solver, ((k+15)%N), d, var_counter);
+		set_sat(solver, var_counter, lr1x & (1<< ((k+16)%N))? false : true );
+	}
+	var_counter++;
+
+	xor_sat(solver, ((k-5+N)%N), c, var_counter);
+	set_sat(solver, var_counter, lr1x & (1<< ((k+3)%N))? true : false);
+	var_counter++;
+
+	xor_sat(solver, ((k+9+N)%N), d, var_counter);
+	set_sat(solver, var_counter, lr1x & (1<< ((k+10)%N))? true : false);
+	var_counter++;
+
+	xor_sat(solver, ((k+1)%N), c, var_counter);
+	int ta = var_counter;
+	var_counter++;
+
+	xor_sat(solver, ((k+8)%N), d, var_counter);
+	int tb = var_counter;
+	var_counter++;
+
+	and_sat(solver, ((k+1)%N), ((k+8)%N), var_counter);
+	int tc = var_counter;
+	var_counter++;
+
+	and_sat(solver, ta, tb, var_counter);
+	int td = var_counter;
+	var_counter++;
+
+	xor_sat(solver, tc, td, var_counter);
+	set_sat(solver, var_counter, lr1x & (1<< ((k+9)%N)) ? true : false);
+	var_counter++;
+}
+
+
+void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2])
+{
+	uint64_t x,y,xf,yf,lr1x,l0,l1,l2;
+	
+	x = a; y = b;
 	encrypt(x,y);
 
-	printf("Plain Text : %lx %lx \n", a, b);
-	printf("%s, %s \n\n", binary(a), binary(b));
-
-	printf("Encrypted : %lx %lx \n", x, y);
-	printf("%s, %s \n\n", binary(x), binary(y));
-
-	// int number_of_faults = 10;
-
 	std::set<int>ff;
-	int var_counter = N+1;
-	int prev_counter = 0;
+	bool unique_solution = false;
 
-	SATSolver solver;
-	
-	solver.log_to_file("logger.txt");
+	vector<uint64_t>attack_L1;
+	vector<uint64_t>attack_L2;
+	vector<int>attack_pos;
 
-    solver.set_num_threads(6);
-    // solver.new_vars(N+1);
+	int T = 0;
 
-	// for (int m = 1; m <= number_of_faults; ++m)
-	int m = 0;
-	while(true)
+	for(int i=0;i<M+2;i++)
 	{
-		m++;
-		int p;
+		if(found[N][i]) T++;
+		else break;
+
+	}
+
+	// std::cout<<std::endl<<T<<std::endl;
+	
+	int p;
+
+	if(T < M+2)
+    while(!unique_solution)
+	{
 		p = uni_dist(rng) % (N);
 		while(ff.find(p) != ff.end())
 		{
@@ -831,113 +857,145 @@ void dfa_attack_1(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M
 		}
 		ff.insert(p);
 
-		xf = a;
-		yf = b;
+		xf = a;yf = b;
+		faulty_encrypt(xf, yf, ROUNDS, ROUNDS-T, p+1);
 
-		faulty_encrypt(xf, yf, ROUNDS, ROUNDS-2, p+1);
-		// faulty_encrypt(xf, yf, p+1);
+		// printf("Fault Number %lu  ", attack_pos.size() +1);
+		// printf("Faulty Encrypted : %lx %lx , Fault : %d\n", xf, yf, p+1);
+		
+		xf = x ^ xf;
+		yf = y ^ yf;
+		l1 = xf;
+		l2 = yf;
 
-		printf("Fault Number %d\n", m);
-		printf("Faulty Encrypted : %lx %lx , Fault : %d\n", xf, yf, p+1);
+		for(int l=0;l<=T-2;l++)
+		{
+			l0 = l1;
+			l1 = l2;
+			l2 = l0 ^ F(L_reg[l+1]) ^ F(L_reg[l+1] ^ l1);
+		}
 
-		int k = predict_fault_location(x^xf,y^yf);
+		int k = predict_fault_location(l0,l1);
 		k--;
-
 		if (k != p)
 		{
 			printf("Attack Failed, poor fault prediction detection\n");
 		}
 
-		lr1x = y ^ yf;
+		// printf("XOR :%s \n\n", binary(lr1x));
+		attack_L1.push_back(l1);
+		attack_L2.push_back(l2);
+		attack_pos.push_back(k);
 
-		printf("XOR :");
-		printf("%s \n\n", binary(lr1x));
+		int var_counter = N+1;
+		std::map<int,int>vars_map;
 
-		equations_3rd_round(solver, lr1x, k, var_counter);
+		SATSolver solver;
+		solver.log_to_file("logger.txt");
+	    solver.set_num_threads(6);
 
-		int new_vars = var_counter - prev_counter;
-		prev_counter = var_counter;
+		for(int i=0;i<attack_pos.size();i++)
+		{
+			for(int l=0;l<N;l++)
+				if(found[l][T])
+					set_sat(solver, l, L_reg[T] & (1<<l) ? true : false );
 
-		solver.new_vars(new_vars);
+			equations_2rd_round(solver, attack_L2[i], attack_pos[i], var_counter, vars_map);
+			equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter, vars_map);
+		}
+
+		solver.new_vars(var_counter);
 
 		lbool ret = solver.solve();
 
 		if (ret != l_True) {
-	        std::cout<< "**Fatal Error!! No Solution Found for the sat solver**\n";
-	        break;
-        }
+		    std::cout<< "**Fatal Error!! No Solution Found for the sat solver**\n";
+		    break;
+		}
 
-        vector<Lit> ban_solution;
-        for (uint32_t var = 0; var < N; var++) {
-            if (solver.get_model()[var] != l_Undef) {
-                ban_solution.push_back(
-                    Lit(var, (solver.get_model()[var] == l_True)? true : false));
-        		std::cout<<var<<' ';
-        		
-            }
-        
-        }
-       
-        ret = solver.solve(&ban_solution);
+		vector<Lit> ban_solution;
+		for (uint32_t var = 0; var < N; var++) {
+		    if (solver.get_model()[var] != l_Undef) {
+		        ban_solution.push_back(
+		            Lit(var, (solver.get_model()[var] == l_True)? true : false));
+		    }
+		}
 
-        std::cout<<ret;
+		solver.add_clause(ban_solution);
+		ret = solver.solve();
+
 		if (ret != l_True) {
-	        std::cout<< "Unique Solution Found!!\n";
-	        break;
-        }
-
+		    std::cout<< "Unique Solution Found!!\n";
+		    unique_solution = true;
+		}
 	}
 
+	if(!unique_solution)
+	{
+		printf("Error!! Something Wrong\n");
+		exit(0);
+	}
+
+	int var_counter = N+1;
+	std::map<int,int>vars_map;
+
+	SATSolver solver;
+	solver.log_to_file("logger.txt");
+    solver.set_num_threads(6);
+	for(int i=0;i<attack_pos.size();i++)
+	{
+		for(int l=0;l<N;l++)
+			if(found[l][T])
+				set_sat(solver, l, L_reg[T] & (1<<l) ? true : false );
+		equations_2rd_round(solver, attack_L2[i], attack_pos[i], var_counter, vars_map);
+		equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter, vars_map);
+	}
+	solver.new_vars(var_counter);
 
 	solver.solve();
-    std::cout<< "Solution is: ";
 
-        // for (uint32_t var = 0; var < solver.nVars(); var++) {
-        //     std::cout<<solver.get_model()[var]<<','; 
-        //     }
-        //     std::cout<<std::endl;
+	printf("Total Fault Number %lu  \n", attack_pos.size() +1);
 
-    for (uint32_t var = 0; var < N; var++) {
-        std::cout<<solver.get_model()[var]<<','; 
-        }
-        std::cout<<std::endl;
-
+    // std::cout<< "Solution is: ";
+    // for (uint32_t var = 0; var < N; var++) {
+    //     std::cout<<solver.get_model()[var]<<','; 
+    //     }
+    //     std::cout<<std::endl;
 
     for (uint32_t var = 0; var < N; var++) 
     {
         if (solver.get_model()[var] != l_Undef) 
         {
-        	found[var][2] = true;
+        	found[var][T] = true;
             if(solver.get_model()[var] == l_True)
             {
-            	L_reg[2] != (1<<var);
+            	L_reg[T] |= (1<<var);
             }
         }
     }
 
-	printf("Mappings:\n");
-	for(auto a: vars)
-	{
-		printf("%d,%d\n",a.first,a.second);
-	}
+	// printf("Mappings:\n");
+	// for(auto a: vars_map)
+	// {
+	// 	printf("%d,%d\n",a.first,a.second);
+	// }
 
-	for(auto a: vars)
+    if(T+1<M+2)
+	for(auto a: vars_map)
 	{
 		int var = a.first;
 		int m = a.second;
 
         if (solver.get_model()[m] != l_Undef) 
         {
-        	found[var][3] = true;
+        	found[var][T+1] = true;
             if(solver.get_model()[m] == l_True)
             {
-            	L_reg[3] != (1<<var);
+            	L_reg[T+1] |= (1<<var);
             }
         }
 	}
-
 	return;
-
 }
 
 void complete_dfa()
@@ -978,8 +1036,8 @@ void complete_dfa()
 	}
 	printf("\n\n");
 
-	bool found[N+1][M+2];
-	uint64_t L_reg[M+2];
+	bool found[N+1][M+2] = {0};
+	uint64_t L_reg[M+2] = {0};
 
 	L_reg[0] = answer[0];
 	L_reg[1] = answer[1];
@@ -989,11 +1047,51 @@ void complete_dfa()
 		for(int j=0;j<M+2;j++)
 		{
 			found[i][j] = false;
-			if(i<2) found[i][j] = true;
+			if(j<2) found[i][j] = true;
 		}
 	}
 
-	dfa_attack_1(a, b, found, L_reg);
+	// for(int i=0;i<N+1;i++)
+	// {
+	// 	for(int j=0;j<M+2;j++)
+	// 	{
+	// 		std::cout<<found[i][j];
+	// 	}
+	// }
+
+	while(!found[N][M+1])
+	{		
+		dfa_attack(a, b, found, L_reg);
+
+		for(int j=0;j<=M+1;j++)
+		{
+			if(!found[N][j])
+			{		
+				int temp = true;
+
+				for(int i=0;i<N;i++)
+				{
+					temp &= found[i][j];
+				}	
+				if(temp) found[N][j] = true;
+			}
+			if(!found[N][j])
+			{
+				break;
+			}
+		}
+
+		for(int i=0;i<M+2;i++)
+		{
+			if(found[N][i])
+				printf("Found");
+			else
+				printf("Not Found\n");
+
+			printf("  Data (L registers from the last round - %d):: %s \n",i, binary(L_reg[i]));
+		}
+		// break;
+	}
 
 }
 
