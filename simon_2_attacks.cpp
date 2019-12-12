@@ -21,9 +21,9 @@ using std::pair;
 
 
 // Just set N and M; 
-#define N (24)
-#define M (3)
-#define DEBUG (1)
+#define N (16)
+#define M (4)
+#define DEBUG (0)
 
 #if (N == 64)
 	#define WORD_MASK (0xffffffffffffffffull)
@@ -178,62 +178,28 @@ void test()
 #include "sat_functions.h"
 
 // Add Equations given the Fault is in Round R given the xor of L register of round R+1 or R redister of R+2
-void equations_2nd_round(SATSolver &solver,uint64_t lxor,uint64_t k,uint64_t &var_counter, std::map<uint64_t,uint64_t>&vars)
+void equations_2nd_round(SATSolver &solver,uint64_t lxor,uint64_t k,uint64_t &var_counter)
 {
 	uint64_t c,d;
 	uint64_t A = ((k-7+N)%N);
 	uint64_t B = ((k+7+N)%N);
 
-	if(vars.find(A) != vars.end())
-	{
-		c = vars[A];
-	}else
-	{
-		c = var_counter;
-		vars[A] = var_counter;
-		var_counter++;
-	}
-
-	if(vars.find(B) != vars.end())
-	{
-		d = vars[B];
-	}else
-	{
-		d = var_counter;
-		vars[B] = var_counter;
-		var_counter++;
-	}
+	c = A + N;
+	d = B + N;
 
 	set_sat(solver, c, lxor & (0x1ull<< ((k+1)%N))? true : false );
 	set_sat(solver, d, lxor & (0x1ull<< ((k+8)%N))? true : false );
 }
 
 // Add Equations given the Fault is in Round R given the xor of L register of round R+2 or R redister of R+3
-void equations_3rd_round(SATSolver &solver,uint64_t lxor, uint64_t k, uint64_t &var_counter, std::map<uint64_t,uint64_t>&vars)
+void equations_3rd_round(SATSolver &solver,uint64_t lxor, uint64_t k, uint64_t &var_counter)
 {
 	uint64_t c,d;
 	uint64_t A = ((k-7+N)%N);
 	uint64_t B = ((k+7+N)%N);
 
-	if(vars.find(A) != vars.end())
-	{
-		c = vars[A];
-	}else
-	{
-		c = var_counter;
-		vars[A] = var_counter;
-		var_counter++;
-	}
-
-	if(vars.find(B) != vars.end())
-	{
-		d = vars[B];
-	}else
-	{
-		d = var_counter;
-		vars[B] = var_counter;
-		var_counter++;
-	}
+	c = A + N;
+	d = B + N;
 
 	and_sat(solver, ((k-6+N)%N), c, var_counter);
 	set_sat(solver, var_counter, lxor & (0x1ull<< ((k+2)%N))? true : false );
@@ -356,8 +322,7 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
 
 		// Setup SAT SOLVER
 
-		uint64_t var_counter = N+1;
-		std::map<uint64_t,uint64_t>vars_map;
+		uint64_t var_counter = 2 * N;
 
 		SATSolver solver;
 		solver.log_to_file("logger.txt");
@@ -369,8 +334,8 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
 
 		for(uint64_t i=0;i<attack_pos.size();i++)
 		{
-			equations_2nd_round(solver, attack_L2[i], attack_pos[i], var_counter, vars_map);
-			equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter, vars_map);
+			equations_2nd_round(solver, attack_L2[i], attack_pos[i], var_counter);
+			equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter);
 		}
 
 		solver.new_vars(var_counter);
@@ -383,7 +348,7 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
 		}
 
 		vector<Lit> ban_solution;
-		for (uint32_t var = 0; var < N; var++) {
+		for (uint32_t var = 0; var < 2 * N; var++) {
 		    if (solver.get_model()[var] != l_Undef) {
 		        ban_solution.push_back(
 		            Lit(var, (solver.get_model()[var] == l_True)? true : false));
@@ -406,8 +371,7 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
 		exit(0);
 	}
 
-	uint64_t var_counter = N+1;
-	std::map<uint64_t,uint64_t>vars_map;
+	uint64_t var_counter = 2 * N;
 
 	SATSolver solver;
 	solver.log_to_file("logger.txt");
@@ -419,8 +383,8 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
 
 	for(uint64_t i=0;i<attack_pos.size();i++)
 	{
-		equations_2nd_round(solver, attack_L2[i], attack_pos[i], var_counter, vars_map);
-		equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter, vars_map);
+		equations_2nd_round(solver, attack_L2[i], attack_pos[i], var_counter);
+		equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter);
 	}
 	solver.new_vars(var_counter);
 
@@ -446,27 +410,18 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
         }
     }
 
-	// printf("Mappings:\n");
-	// for(auto a: vars_map)
-	// {
-	// 	printf("%ld,%ld\n",a.first,a.second);
-	// }
-
     if(T+1<M+2)
-	for(auto a: vars_map)
-	{
-		uint64_t var = a.first;
-		uint64_t m = a.second;
-
-        if (solver.get_model()[m] != l_Undef) 
+    for (uint32_t var = 0; var < N; var++) 
+    {
+        if (solver.get_model()[N + var] != l_Undef) 
         {
         	found[var][T+1] = true;
-            if(solver.get_model()[m] == l_True)
+            if(solver.get_model()[N + var] == l_True)
             {
             	L_reg[T+1] |= (0x1ull<<var);
             }
         }
-	}
+    }
 
 	// fault_number[T-2] = attack_pos.size();
 	fault_number[T-2] = number_of_faults_counter;
@@ -515,7 +470,7 @@ void complete_dfa()
 	}
 	
 	bool found[N+1][M+2] = {0}; // Nth bit of Mth round register is found
-	uint64_t L_reg[M+2] = {0};
+	uint64_t L_reg[M+2] = {false};
 
 	L_reg[0] = answer[0];
 	L_reg[1] = answer[1];
@@ -535,7 +490,6 @@ void complete_dfa()
 		// Checks the Last register which hasn't been found till now
 		// And mounts a attack to find that complete register
 		dfa_attack(a, b, found, L_reg);
-
 		// Check whether whole registers have been found
 		// Sets the Nth Valse of found matric to True
 		for(uint64_t j=0;j<=M+1;j++)
@@ -564,8 +518,9 @@ void complete_dfa()
 				printf("Not Found\n");
 			printf("  Data (L registers from the last round - %ld):: %s \n",i, binary(L_reg[i]));
 		}
-		// break;
 	}
+
+	return;
 }
 
 
@@ -634,10 +589,10 @@ void check_hamming_relation()
 
 int main() {
 
+	rng.seed(time(NULL)); // seed marsenne twister rng
+
 	if(DEBUG)
 	{
-
-		rng.seed(time(NULL)); // seed marsenne twister rng
 
 		printf("%llx\n",WORD_MASK);
 
@@ -677,8 +632,7 @@ int main() {
 	// fault_location_find_test();
 
 	uint64_t avg_sum = 0;
-	uint64_t iters = 1e2;
-
+	uint64_t iters = 1e1;
 
 	for(uint64_t i=0;i<iters;i++)
 	{
@@ -690,6 +644,7 @@ int main() {
 		auto start = std::chrono::steady_clock::now();
 
 		complete_dfa();
+		
 
 		auto end = std::chrono::steady_clock::now();
 
@@ -704,7 +659,7 @@ int main() {
 		}std::cout<<sum<<std::endl;
 
 		avg_sum += sum;
-		break;
+		// break;
 	}
 
 	std::cout<<avg_sum / iters <<std::endl;

@@ -21,9 +21,9 @@ using std::pair;
 
 
 // Just set N and M; 
-#define N (24)
-#define M (3)
-#define DEBUG (1)
+#define N (48)
+#define M (2) 
+#define DEBUG (0)
 
 #if (N == 64)
 	#define WORD_MASK (0xffffffffffffffffull)
@@ -167,9 +167,11 @@ void test()
 // Fault Injection and Prediction //////
 ////////////////////////////////////////
 
-#define FAULT_ROUND (ROUNDS -2)
+// ROUNDS - x represents T - x - 1 round 
+// (Last round is T -1 which is ROUNDS - 0)
+#define FAULT_ROUND (ROUNDS-2) 
 // Header that contains all the fault injection and location finding functions
-#include "fault_lib.h"
+#include "fault_lib_2.h"
 
 ///////////////////////////////////////
 ////////////// SAT SETUP //////////////
@@ -177,126 +179,234 @@ void test()
 
 #include "sat_functions.h"
 
-// Add Equations given the Fault is in Round R given the xor of L register of round R+1 or R redister of R+2
-void equations_2nd_round(SATSolver &solver,uint64_t lxor,uint64_t k,uint64_t &var_counter, std::map<uint64_t,uint64_t>&vars)
-{
-	uint64_t c,d;
-	uint64_t A = ((k-7+N)%N);
-	uint64_t B = ((k+7+N)%N);
-
-	if(vars.find(A) != vars.end())
-	{
-		c = vars[A];
-	}else
-	{
-		c = var_counter;
-		vars[A] = var_counter;
-		var_counter++;
-	}
-
-	if(vars.find(B) != vars.end())
-	{
-		d = vars[B];
-	}else
-	{
-		d = var_counter;
-		vars[B] = var_counter;
-		var_counter++;
-	}
-
-	set_sat(solver, c, lxor & (0x1ull<< ((k+1)%N))? true : false );
-	set_sat(solver, d, lxor & (0x1ull<< ((k+8)%N))? true : false );
-}
 
 // Add Equations given the Fault is in Round R given the xor of L register of round R+2 or R redister of R+3
-void equations_3rd_round(SATSolver &solver,uint64_t lxor, uint64_t k, uint64_t &var_counter, std::map<uint64_t,uint64_t>&vars)
+void equations(SATSolver &solver,uint64_t l1, uint64_t l2, uint64_t k, uint64_t dist, uint64_t &var_counter)
 {
-	uint64_t c,d;
-	uint64_t A = ((k-7+N)%N);
-	uint64_t B = ((k+7+N)%N);
+	uint64_t a,b,c;
+	uint64_t A;
+	uint64_t B;
+	uint64_t ta, tb, tc, td, te;
 
-	if(vars.find(A) != vars.end())
+	// uint64_t skips[] = {2,3,9,10,16};
+	// uint64_t flips[] = {0,4};
+
+	bool skip_check = false;
+	bool flip_check = false;
+
+
+	for(uint64_t i=0;i<N;i++)
 	{
-		c = vars[A];
-	}else
-	{
+		skip_check = false;
+		flip_check = false;
+
+		if(dist == 1)
+		{
+			if((k + 0)%N == i)
+			{
+				flip_check = true;
+			}	
+
+		}else if(dist == 2)
+		{
+
+			if((k + 1)%N == i ||(k + 8)%N == i)
+			{
+				skip_check = true;
+			}
+	
+			if((k + 2)%N == i)
+			{
+				flip_check = true;
+			}	
+
+		}else if(dist == 3)
+		{
+
+			if(
+				(k + 2)%N == i ||
+				(k + 3)%N == i ||
+				(k + 9)%N == i ||
+				(k + 10)%N == i ||
+				(k + 16)%N == i)
+			{
+				skip_check = true;
+			}
+	
+			if((k + 0)%N == i ||(k + 4)%N == i)
+			{
+				flip_check = true;
+			}	
+
+		}else if(dist == 4)
+		{
+
+			if(
+				(k + 1)%N == i ||
+				(k + 3)%N == i ||
+				(k + 4)%N == i ||
+				(k + 5)%N == i ||
+				(k + 8)%N == i ||
+				(k + 10)%N == i ||
+				(k + 11)%N == i ||
+				(k + 12)%N == i ||
+				(k + 17)%N == i ||
+				(k + 18)%N == i ||
+				(k + 24)%N == i)
+			{
+				skip_check = true;
+			}
+	
+			if((k + 6)%N == i)
+			{
+				flip_check = true;
+			}	
+		}else if(dist == 5)
+		{
+
+			if(
+				(k + 2)%N == i ||
+				(k + 3)%N == i ||
+				(k + 4)%N == i ||
+				(k + 5)%N == i ||
+				(k + 6)%N == i ||
+				(k + 7)%N == i ||
+				(k + 8)%N == i ||
+				(k + 9)%N == i ||
+				(k + 10)%N == i ||
+				(k + 11)%N == i ||
+				(k + 12)%N == i ||
+				(k + 13)%N == i ||
+				(k + 14)%N == i ||
+				(k + 16)%N == i ||
+				(k + 18)%N == i ||
+				(k + 19)%N == i ||
+				(k + 20)%N == i ||
+				(k + 25)%N == i ||
+				(k + 26)%N == i ||
+				(k + 32)%N == i)
+			{
+				skip_check = true;
+			}
+	
+			if((k + 0)%N == i)
+			{
+				flip_check = true;
+			}	
+		}else if(dist == 6)
+		{
+			if(
+				(k + 1)%N == i ||
+				(k + 3)%N == i ||
+				(k + 4)%N == i ||
+				(k + 5)%N == i ||
+				(k + 6)%N == i ||
+				(k + 7)%N == i ||
+				(k + 8)%N == i ||
+				(k + 9)%N == i ||
+				(k + 10)%N == i ||
+				(k + 11)%N == i ||
+				(k + 12)%N == i ||
+				(k + 13)%N == i ||
+				(k + 14)%N == i ||
+				(k + 15)%N == i ||
+				(k + 16)%N == i ||
+				(k + 17)%N == i ||
+				(k + 18)%N == i ||
+				(k + 19)%N == i ||
+				(k + 20)%N == i ||
+				(k + 21)%N == i ||
+				(k + 22)%N == i ||
+				(k + 24)%N == i ||
+				(k + 25)%N == i ||
+				(k + 26)%N == i ||
+				(k + 27)%N == i ||
+				(k + 28)%N == i ||
+				(k + 33)%N == i ||
+				(k + 34)%N == i ||
+				(k + 40)%N == i)
+			{
+				skip_check = true;
+			}
+	
+			if((k + 2)%N == i)
+			{
+				flip_check = true;
+			}	
+		}
+
+		if(skip_check) continue;
+
+		A = ((i+N-1)%N);
+		B = ((i+N-8)%N);
+
+		set_sat(solver, var_counter, l2 & (0x1ull<< ((i+N-1)%N)) ? true : false);
+		a = var_counter;
+		var_counter++;
+
+		set_sat(solver, var_counter, l2 & (0x1ull<< ((i+N-8)%N)) ? true : false);
+		b = var_counter;
+		var_counter++;
+
+		set_sat(solver, var_counter, l2 & (0x1ull<< ((i+N-2)%N)) ? true : false);
 		c = var_counter;
-		vars[A] = var_counter;
+		var_counter++;
+
+		xor_sat(solver, A, a, var_counter);
+		ta = var_counter;
+		var_counter++;
+
+		xor_sat(solver, B, b, var_counter);
+		tb = var_counter;
+		var_counter++;
+
+		and_sat(solver, A, B, var_counter);
+		tc = var_counter;
+		var_counter++;
+
+		and_sat(solver, ta, tb, var_counter);
+		td = var_counter;
+		var_counter++;
+
+		xor_sat(solver, tc, td, var_counter);
+		te = var_counter;
+		var_counter++;
+
+		xor_sat(solver, te, c, var_counter);
+
+		if(flip_check)
+		{
+			set_sat(solver, var_counter, l1 & (0x1ull<< i) ? false : true);
+		}else
+		{
+			set_sat(solver, var_counter, l1 & (0x1ull<< i) ? true : false);
+		}
+
 		var_counter++;
 	}
-
-	if(vars.find(B) != vars.end())
-	{
-		d = vars[B];
-	}else
-	{
-		d = var_counter;
-		vars[B] = var_counter;
-		var_counter++;
-	}
-
-	and_sat(solver, ((k-6+N)%N), c, var_counter);
-	set_sat(solver, var_counter, lxor & (0x1ull<< ((k+2)%N))? true : false );
-	var_counter++;
-
-	if((k+16)%N != k)
-	{		
-		and_sat(solver, ((k+15)%N), d, var_counter);
-		set_sat(solver, var_counter, lxor & (0x1ull<< ((k+16)%N))? true : false );
-	}else
-	{
-		and_sat(solver, ((k+15)%N), d, var_counter);
-		set_sat(solver, var_counter, lxor & (0x1ull<< ((k+16)%N))? false : true );
-	}
-	var_counter++;
-
-	xor_sat(solver, ((k-5+N)%N), c, var_counter);
-	set_sat(solver, var_counter, lxor & (0x1ull<< ((k+3)%N))? true : false);
-	var_counter++;
-
-	xor_sat(solver, ((k+9+N)%N), d, var_counter);
-	set_sat(solver, var_counter, lxor & (0x1ull<< ((k+10)%N))? true : false);
-	var_counter++;
-
-	xor_sat(solver, ((k+1)%N), c, var_counter);
-	uint64_t ta = var_counter;
-	var_counter++;
-
-	xor_sat(solver, ((k+8)%N), d, var_counter);
-	uint64_t tb = var_counter;
-	var_counter++;
-
-	and_sat(solver, ((k+1)%N), ((k+8)%N), var_counter);
-	uint64_t tc = var_counter;
-	var_counter++;
-
-	and_sat(solver, ta, tb, var_counter);
-	uint64_t td = var_counter;
-	var_counter++;
-
-	xor_sat(solver, tc, td, var_counter);
-	set_sat(solver, var_counter, lxor & (0x1ull<< ((k+9)%N)) ? true : false);
-	var_counter++;
 }
 
 uint64_t fault_number[M];
+uint64_t unique_fault_number[M];
+
+
+vector<uint64_t>faulty_x;
+vector<uint64_t>faulty_y;
+vector<uint64_t>faulty_pos;
+std::set<uint64_t>ff;
 
 // Mounts the Attack on a Single Round
-void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2])
+int dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2])
 {
 	uint64_t x,y,xf,yf,lr1x,l0,l1,l2;
 	
 	x = a; y = b;
 	encrypt(x,y);
 
-	std::set<uint64_t>ff;
 	bool unique_solution = false;
 
-	vector<uint64_t>attack_L1;
-	vector<uint64_t>attack_L2;
-	vector<uint64_t>attack_pos;
-
 	uint64_t T = 0;
+	uint64_t Dist = 0;
 
 	for(uint64_t i=0;i<M+2;i++)
 	{
@@ -306,33 +416,147 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
 
 	// std::cout<<std::endl<<T<<std::endl;
 	uint64_t number_of_faults_counter = 0;
+	uint64_t number_unique_of_faults_counter = 0;
+
 
 	uint64_t p;
+
+	Dist = ROUNDS - FAULT_ROUND - T + 1;
 
 	if(T < M+2)
     while(!unique_solution)
 	{
-		number_of_faults_counter++;
 
-		p = uni_dist(rng) % (N);
-		while(ff.find(p) != ff.end())
+		// Check if currect number of faults give a unique solution
+		if(faulty_pos.size())
+		{			
+			// Setup SAT SOLVER
+
+			uint64_t var_counter = N;
+
+			SATSolver solver;
+			if(DEBUG) solver.log_to_file("logger.txt");
+		    solver.set_num_threads(6);
+
+			for(uint64_t i=0;i<faulty_pos.size();i++)
+			{
+				l1 = x ^ faulty_x[i];
+				l2 = y ^ faulty_y[i];
+
+				for(uint64_t l=0;l<=T-2;l++)
+				{
+					l0 = l1;
+					l1 = l2;
+					l2 = l0 ^ F(L_reg[l+1]) ^ F(L_reg[l+1] ^ l1);
+				}
+
+				// l0 = x ^ faulty_x[i];
+				// l1 = y ^ faulty_y[i];			
+				// l2 = l0 ^ F(y) ^ F(y ^ l1);
+
+				equations(solver,l1,l2,faulty_pos[i],Dist,var_counter);
+			}
+
+			solver.new_vars(var_counter);
+
+			lbool ret = solver.solve();
+
+			if (ret != l_True) {
+			    std::cout<< "**Fatal Error!! No Solution Found for the sat solver**\n";
+			    break;
+			}
+
+			vector<Lit> ban_solution;
+			for (uint32_t var = 0; var < 2 * N; var++) {
+			    if (solver.get_model()[var] != l_Undef) {
+			        ban_solution.push_back(
+			            Lit(var, (solver.get_model()[var] == l_True)? true : false));
+			    }
+			}
+
+			solver.add_clause(ban_solution);
+			ret = solver.solve();
+
+			if (ret != l_True) {
+				if(DEBUG)
+			    std::cout<< "Unique Solution Found!!\n";
+			    unique_solution = true;
+			}
+		}
+
+
+		if(faulty_pos.size() > N*0.9)
 		{
-			number_of_faults_counter++;
+			break;
+		}
+
+		if(!unique_solution)
+		{
 			p = uni_dist(rng) % (N);
+			number_of_faults_counter++;
+			number_unique_of_faults_counter++;
+			while(ff.find(p) != ff.end())
+			{
+				number_of_faults_counter++;
+				p = uni_dist(rng) % (N);
+			}
+			ff.insert(p);
+
+			xf = a;yf = b;
+			faulty_encrypt(xf, yf, ROUNDS, FAULT_ROUND, p+1);
+
+			if(DEBUG)
+			{
+				printf("Fault Number %lu  ", faulty_pos.size() +1);
+				printf("Faulty Encrypted : %lx %lx , Fault : %ld\n", xf, yf, p+1);		
+			}
+
+			l0 = x ^ xf;
+			l1 = y ^ yf;
+			l2 = x ^ xf ^ F(yf) ^ F(y);
+
+			// for(uint64_t l=0;l<=T-2;l++)
+			// {
+			// 	l0 = l1;
+			// 	l1 = l2;
+			// 	l2 = l0 ^ F(L_reg[l+1]) ^ F(L_reg[l+1] ^ l1);
+			// }
+
+			uint64_t k = find_fault_location(l0,l1,l2);
+			k--;
+			if (k != p)
+			{
+				if(DEBUG)
+				printf("Attack Failed, poor fault location_find detection\n");
+				return 0;
+			}
+
+			// printf("XOR :%s \n\n", binary(l1));
+			faulty_x.push_back(xf);
+			faulty_y.push_back(yf);
+			faulty_pos.push_back(k);
 		}
-		ff.insert(p);
 
-		xf = a;yf = b;
-		faulty_encrypt(xf, yf, ROUNDS, ROUNDS-T, p+1);
 
-		if(DEBUG)
-		{
-			printf("Fault Number %lu  ", attack_pos.size() +1);
-			printf("Faulty Encrypted : %lx %lx , Fault : %ld\n", xf, yf, p+1);		
-		}
+	}
 
-		l1 = x ^ xf;
-		l2 = y ^ yf;
+	if(!unique_solution)
+	{
+		// printf("Error!! Something Wrong\n");
+		return 0;
+	}
+
+	uint64_t var_counter = N;
+
+	SATSolver solver;
+	if(DEBUG) solver.log_to_file("logger.txt");
+    solver.set_num_threads(6);
+
+	for(uint64_t i=0;i<faulty_pos.size();i++)
+	{
+
+		l1 = x ^ faulty_x[i];
+		l2 = y ^ faulty_y[i];
 
 		for(uint64_t l=0;l<=T-2;l++)
 		{
@@ -341,89 +565,10 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
 			l2 = l0 ^ F(L_reg[l+1]) ^ F(L_reg[l+1] ^ l1);
 		}
 
-		uint64_t k = find_fault_location(l0,l1);
-		k--;
-		if (k != p)
-		{
-			printf("Attack Failed, poor fault location_find detection\n");
-		}
-
-		// printf("XOR :%s \n\n", binary(l1));
-		attack_L1.push_back(l1);
-		attack_L2.push_back(l2);
-		attack_pos.push_back(k);
-
-
-		// Setup SAT SOLVER
-
-		uint64_t var_counter = N+1;
-		std::map<uint64_t,uint64_t>vars_map;
-
-		SATSolver solver;
-		solver.log_to_file("logger.txt");
-	    solver.set_num_threads(6);
-
-		for(uint64_t l=0;l<N;l++)
-			if(found[l][T])
-				set_sat(solver, l, L_reg[T] & (0x1ull<<l) ? true : false );
-
-		for(uint64_t i=0;i<attack_pos.size();i++)
-		{
-			equations_2nd_round(solver, attack_L2[i], attack_pos[i], var_counter, vars_map);
-			equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter, vars_map);
-		}
-
-		solver.new_vars(var_counter);
-
-		lbool ret = solver.solve();
-
-		if (ret != l_True) {
-		    std::cout<< "**Fatal Error!! No Solution Found for the sat solver**\n";
-		    break;
-		}
-
-		vector<Lit> ban_solution;
-		for (uint32_t var = 0; var < N; var++) {
-		    if (solver.get_model()[var] != l_Undef) {
-		        ban_solution.push_back(
-		            Lit(var, (solver.get_model()[var] == l_True)? true : false));
-		    }
-		}
-
-		solver.add_clause(ban_solution);
-		ret = solver.solve();
-
-		if (ret != l_True) {
-			if(DEBUG)
-		    std::cout<< "Unique Solution Found!!\n";
-		    unique_solution = true;
-		}
+		equations(solver,l1,l2,faulty_pos[i],Dist,var_counter);
 	}
 
-	if(!unique_solution)
-	{
-		printf("Error!! Something Wrong\n");
-		exit(0);
-	}
-
-	uint64_t var_counter = N+1;
-	std::map<uint64_t,uint64_t>vars_map;
-
-	SATSolver solver;
-	solver.log_to_file("logger.txt");
-    solver.set_num_threads(6);
-
-	for(uint64_t l=0;l<N;l++)
-		if(found[l][T])
-			set_sat(solver, l, L_reg[T] & (0x1ull<<l) ? true : false );
-
-	for(uint64_t i=0;i<attack_pos.size();i++)
-	{
-		equations_2nd_round(solver, attack_L2[i], attack_pos[i], var_counter, vars_map);
-		equations_3rd_round(solver, attack_L1[i], attack_pos[i], var_counter, vars_map);
-	}
 	solver.new_vars(var_counter);
-
 	solver.solve();
 
 	// printf("Total Fault Number %lu  \n", attack_pos.size() +1);
@@ -446,37 +591,21 @@ void dfa_attack(uint64_t a, uint64_t b, bool found[N+1][M+2], uint64_t L_reg[M+2
         }
     }
 
-	// printf("Mappings:\n");
-	// for(auto a: vars_map)
-	// {
-	// 	printf("%ld,%ld\n",a.first,a.second);
-	// }
-
-    if(T+1<M+2)
-	for(auto a: vars_map)
-	{
-		uint64_t var = a.first;
-		uint64_t m = a.second;
-
-        if (solver.get_model()[m] != l_Undef) 
-        {
-        	found[var][T+1] = true;
-            if(solver.get_model()[m] == l_True)
-            {
-            	L_reg[T+1] |= (0x1ull<<var);
-            }
-        }
-	}
-
-	// fault_number[T-2] = attack_pos.size();
 	fault_number[T-2] = number_of_faults_counter;
+	unique_fault_number[T-2] = number_unique_of_faults_counter;
 
-	return;
+	return 1;
 }
 
 // Handles the complete attack
-void complete_dfa()
+int complete_dfa()
 {
+	faulty_y.clear();
+	faulty_x.clear();
+	faulty_pos.clear();
+	ff.clear();
+	for(int i=0;i<M;i++)fault_number[i] = 0;
+
 	if(DEBUG)
 	printf("\n****Starting Attack****\n");
 
@@ -515,7 +644,7 @@ void complete_dfa()
 	}
 	
 	bool found[N+1][M+2] = {0}; // Nth bit of Mth round register is found
-	uint64_t L_reg[M+2] = {0};
+	uint64_t L_reg[M+2] = {false};
 
 	L_reg[0] = answer[0];
 	L_reg[1] = answer[1];
@@ -534,8 +663,12 @@ void complete_dfa()
 		// This is the attack function
 		// Checks the Last register which hasn't been found till now
 		// And mounts a attack to find that complete register
-		dfa_attack(a, b, found, L_reg);
+		int check = dfa_attack(a, b, found, L_reg);
 
+		if(check == 0)
+		{
+			return 0;
+		}
 		// Check whether whole registers have been found
 		// Sets the Nth Valse of found matric to True
 		for(uint64_t j=0;j<=M+1;j++)
@@ -564,80 +697,21 @@ void complete_dfa()
 				printf("Not Found\n");
 			printf("  Data (L registers from the last round - %ld):: %s \n",i, binary(L_reg[i]));
 		}
+
 		// break;
 	}
+
+	return 1;
 }
 
 
-/////////////////////////////////////////////////////////
-////////////// Randon Functions Currently Testing /////////
-/////////////////////////////////////////////////////////
-
-// Function Written to find relation between hamming weight
-// encrypted text and previous round registers
-// Current Result: No Relations
-void check_hamming_relation()
-{
-	uint64_t a,b,x,y,x1,y1;
-
-	uint64_t s1,s2,s3;
-	s1 = s2 = s3 = 0;
-
-	int64_t s4 = 0;
-
-	int c1,c2,c3,c4;
-
-	c4 = 0;
-
-
-	for(int i=0;i<1e7;i++)
-	{
-
-		a = uni_dist(rng) & WORD_MASK;
-		b = uni_dist(rng) & WORD_MASK;
-		setup_random_key();
-
-		x1 = x = a;
-		y1 = y = b;
-		encrypt(x, y, ROUNDS);
-		encrypt(x1, y1, ROUNDS-1);
-		// std::cout<<hammingWeight(x)<<' ';
-		// std::cout<<hammingWeight(y)<<' ';
-		// std::cout<<hammingWeight(y1)<<'\n';
-		
-
-		c1 = hammingWeight(x);
-		c2 = hammingWeight(y);
-		c3 = hammingWeight(y1);
-	
-
-		if(c1 >= 14)
-		{
-
-			s1 += c1;
-			s2 += c2;
-			s3 += c3;
-			c4++;
-
-		}
-	}
-
-	if(c4 != 0)
-	{
-		std::cout<<s1/c4<<' ';
-		std::cout<<s2/c4<<' ';
-		std::cout<<s3/c4<<'\n';
-	}
-}
-
-		
 
 int main() {
 
+	rng.seed(time(NULL)); // seed marsenne twister rng
+
 	if(DEBUG)
 	{
-
-		rng.seed(time(NULL)); // seed marsenne twister rng
 
 		printf("%llx\n",WORD_MASK);
 
@@ -672,16 +746,27 @@ int main() {
 
 	std::cout<<"N: "<<N<<std::endl;
 	std::cout<<"M: "<<M<<std::endl;
+	std::cout<<"Fault Round: T - "<<ROUNDS - FAULT_ROUND + 1<<std::endl;
+
 
 	fault_location_find_setup();
+
 	// fault_location_find_test();
 
-	uint64_t avg_sum = 0;
-	uint64_t iters = 1e2;
+	double avg_sum = 0;
+	double unique_avg_sum = 0;
 
+	uint64_t iters = 2e2;
+	// iters = 10;
+
+
+	uint64_t failed_attacks = 0;
+	uint64_t check = 0;
 
 	for(uint64_t i=0;i<iters;i++)
 	{
+		check = 1;
+
 		for(uint64_t j=0;j<M;j++)
 		{
 			fault_number[j] = 0;
@@ -689,26 +774,50 @@ int main() {
 
 		auto start = std::chrono::steady_clock::now();
 
-		complete_dfa();
+		check = complete_dfa();
 
+		if(check == 0)
+		{
+			failed_attacks++;
+			// std::cout<<"FAILED"<<std::endl;
+			continue;
+		}
+		
 		auto end = std::chrono::steady_clock::now();
 
-		std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()<<"ms ";
+		// std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()<<"ms ";
 
-		uint64_t sum = 0;
+		double sum = 0, unique_sum = 0;
 
 		for(uint64_t j=0;j<M;j++)
 		{
-			std::cout<<fault_number[j]<<' ';
+			// std::cout<<fault_number[j]<<' ';
 			sum += fault_number[j];
-		}std::cout<<sum<<std::endl;
+			unique_sum += unique_fault_number[j];
+
+		}
+		// std::cout<<sum<<std::endl;
+
+		if(i%100==0)
+		std::cout<<i<<std::endl;
 
 		avg_sum += sum;
-		break;
+		unique_avg_sum += unique_sum;
+		
+		if(DEBUG) break;
+		// break;
 	}
 
-	std::cout<<avg_sum / iters <<std::endl;
+	if(iters == failed_attacks)
+	{
+		std::cout<<"All Attacks Failed -> "<<(double)failed_attacks / (double)iters<<std::endl;
 
+	}else
+	{
+		std::cout<<"Average Faults "<<avg_sum / (iters - failed_attacks) <<std::endl;
+		std::cout<<"Average Unique Faults "<<unique_avg_sum / (iters - failed_attacks) <<std::endl;
+		std::cout<<"Failed Attacks "<<(double)failed_attacks / (double)iters<<std::endl;
+	}
 	// check_hamming_relation();
 
 	return 0;
